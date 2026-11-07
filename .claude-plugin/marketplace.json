@@ -1,0 +1,5 @@
+{
+  "name": "footer-ag",
+  "owner": { "name": "Aleks" },
+  "plugins": [{ "name": "footer-ag", "source": "./" }]
+}
