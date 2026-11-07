@@ -13,7 +13,7 @@ Based on pulse-bar by german-98 (IT-SKP marketplace).
 From a shell (the repo is private, so git on that computer must be signed in to GitHub):
 
 ```
-claude plugin marketplace add <your-github-name>/footer-ag
+claude plugin marketplace add ALEKSGOOD-lab/futerAG
 claude plugin install footer-ag@footer-ag
 ```
 
