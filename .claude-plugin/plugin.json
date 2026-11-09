@@ -1,1 +1,1 @@
-{ "name": "footer-ag", "version": "1.0.0", "description": "Animated limit bar in the footer (5 h / weekly) with an ⓘ details card above the prompt", "types": "./types/index.d.ts", "hooks": ["./hooks/hooks.json"] }
+{ "name": "footer-ag", "version": "1.1.0", "description": "Animated limit bar in the footer (5 h / weekly) with an ⓘ details card above the prompt and limit notifications", "types": "./types/index.d.ts", "hooks": ["./hooks/hooks.json"] }
