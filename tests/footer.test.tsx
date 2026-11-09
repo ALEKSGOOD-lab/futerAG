@@ -38,7 +38,9 @@ for (const surface of ['desktop', 'terminal'] as const) {
   test(`${surface}: footer = live values + ⓘ, nothing else`, async ($, on) => {
     seed(on)
     const ui = await $.ui.mount({ ...FOOTER, surface })
-    expect(await ui.find({ type: 'Text', text: /14%/ })).toBeDefined()
+    // 14% used: the bar and the number both show what is left
+    expect(await ui.find({ type: 'Text', text: /86%/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: '5ч' })).toBeDefined()
     expect(String((await ui.find({ key: 'footer-ag-info' }))?.props.label)).toContain('ⓘ')
     expect(await ui.find({ type: 'Text', text: /лимит|потрачено|токен|сброс/i })).toBeUndefined()
     await ui.unmount()

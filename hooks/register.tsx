@@ -32,8 +32,21 @@ async function setOpen($: any, to: boolean) {
   anim = timer
 }
 
+// one place for the card's and footer's colours
+const COLOUR = {
+  bg: [30, 30, 30], // the dark background the card fades in from
+  text: '#e5e5e5', // main text in the card
+  muted: '#8b8b8b', // labels and secondary text
+  reset: '#22e5f0', // the reset countdown
+  face: '#5eead4', // the short time next to the footer bar
+  context: '#c4b5fd', // the "this chat" block
+  unknown: '#3a3a40', // the bar's track while there is no reading yet
+}
+// below this share of the limit left, the bar and percent start to pulse
+const URGENT = 0.15
+
 // a colour faded toward the band's dark background, for the card fading in
-const BG = [30, 30, 30]
+const BG = COLOUR.bg
 export function fade(color: string, p: number): string {
   const rgb = [1, 3, 5].map(i => parseInt(color.slice(i, i + 2), 16))
   const t = p * (2 - p) // ease out
@@ -126,10 +139,23 @@ const left = (used: number) => Math.max(0, Math.min(1, 1 - used / 100))
 // The fill is a gradient (deeper at the start, brighter at the edge), its last cell lit only as far as the
 // remainder reaches (a soft edge, not a jump), the empty track is tinted with the bar's own colour, and a
 // soft highlight sweeps along the lit part. When little is left, the bar and the percent breathe instead.
-function item(Box: any, Text: any, t: number, key: string, remaining: number, pct: string, label: string, width: number, pad: number) {
+// With no reading yet (`known` false) the bar is a plain grey track and the percent a dash, so an unknown
+// limit never looks like a full, healthy one.
+function item(Box: any, Text: any, t: number, key: string, remaining: number, pct: string, label: string, width: number, pad: number, known = true) {
+  if (!known) {
+    const cells = Array.from({ length: width }, (_, i) => <Text key={i} color={COLOUR.unknown}>{CELL}</Text>)
+    return (
+      <Box key={key} flexDirection="row" gap={1}>
+        <Box width={width * 2} flexShrink={0}><Text>{cells}</Text></Box>
+        <Box width={pad} flexShrink={0}><Text color={COLOUR.muted} bold>{pct}</Text></Box>
+        {label ? <Text dimColor>{label}</Text> : null}
+      </Box>
+    )
+  }
   const base = baseColor(remaining)
-  const urgent = remaining < 0.15
-  const fill = Math.max(0.35, remaining * width) // always a glimmer, even at the very end
+  const urgent = remaining < URGENT
+  // a small glimmer while anything is left, so 99% used still differs from 90%; nothing lit at 100%
+  const fill = remaining > 0 ? Math.max(0.15, remaining * width) : 0
   const track = mix([38, 38, 44], base, 0.16)
   const breath = 0.5 + 0.5 * Math.sin(t / 2.6)
   // the highlight runs across the lit cells and past them, then starts over
@@ -189,6 +215,8 @@ export const register: Register = on => {
     const fresh = pick(e.context, e.rateLimits)
     if (fresh.five) await $.store.set('five', fresh.five)
     if (fresh.week) await $.store.set('week', fresh.week)
+    await warn($, 'five', fresh.five)
+    await warn($, 'week', fresh.week)
     await update($, snap, old => ({ ...fresh, five: fresh.five ?? old.five, week: fresh.week ?? old.week }))
     return next(e)
   })
@@ -198,22 +226,28 @@ export const register: Register = on => {
     const modes = await next(e)
     const s = await read($, snap)
     const v = await read($, view)
-    // no reading yet (fresh chat, nothing stored): still show the bar, empty, so it is always there
-    const l = (v === 'week' ? s.week : s.five) ?? { used: 0, resetsAt: null }
+    // no reading yet (fresh chat, nothing stored): still show the bar, grey, so it is always there
+    const lim = v === 'week' ? s.week : s.five
+    const known = lim != null
+    const l = lim ?? { used: 0, resetsAt: null }
     const t = await read($, tick)
     const { Box, Text, Button } = $.ui.resolve(e)
     const isOpen = await read($, open)
     const r = left(l.used)
     // the footer slot fits about four characters: "4:21" for hours left, "2д" for days left
     const now = await $.clock.now()
-    const face = shortLeft(l.resetsAt, now) || (v === 'week' ? 'нед' : '5ч')
+    const face = known ? shortLeft(l.resetsAt, now) : ''
+    // the bar shows what is left, so the number does too: a full bar reads "100%", not "0%"
+    const pct = known ? `${Math.round(r * 100)}%` : '—'
     return (
       <Box flexDirection="row" flexGrow={1} justifyContent="space-between" gap={2}>
         <Box flexDirection="row" gap={1}>
           {/* only the live values: nothing more fits, and the details live in the card above the prompt */}
           <Box key="footer-ag-values" flexDirection="row" gap={1}>
-            {item(Box, Text, t, v, r, `${Math.round(l.used)}%`, '', 5, 4)}
-            <Text bold color={r < 0.15 ? hex(baseColor(r)) : '#5eead4'}>{face}</Text>
+            {/* which limit the bar is showing: /limit switches it */}
+            <Text key="footer-ag-mode" dimColor>{v === 'week' ? 'нед' : '5ч'}</Text>
+            {item(Box, Text, t, v, r, pct, '', 5, 4, known)}
+            {face ? <Text bold color={r < URGENT ? hex(baseColor(r)) : COLOUR.face}>{face}</Text> : null}
           </Box>
           {/* a click works in the footer; hover cannot open anything from here on the desktop */}
           <Button key="footer-ag-info" plain label={isOpen ? ' ✕ ' : ' ⓘ '} onPress={() => setOpen($, !isOpen)} />
@@ -222,9 +256,6 @@ export const register: Register = on => {
       </Box>
     )
   })
-
-
-
 
   // above the prompt: the band, unless a survey holds it
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
@@ -258,13 +289,13 @@ async function drawCard($: any, e: any) {
     if (a <= 0) return null
     return <Box key={key} flexDirection="row" marginLeft={Math.round((1 - easeOut(a)) * 4)}>{body(a)}</Box>
   }
-  const GREY = '#8b8b8b'
+  const GREY = COLOUR.muted
 
   const limit = (key: string, name: string, lim: Limit | null, weekly: boolean) => {
     if (!lim) {
       return (
         <Box key={key} flexDirection="column">
-          {row(0, 'h', (a: number) => <Text bold color={fade('#e5e5e5', a)}>{name}</Text>)}
+          {row(0, 'h', (a: number) => <Text bold color={fade(COLOUR.text, a)}>{name}</Text>)}
           {row(1, 'n', (a: number) => <Text color={fade(GREY, a)}>пока нет данных</Text>)}
         </Box>
       )
@@ -280,12 +311,12 @@ async function drawCard($: any, e: any) {
           <Text key="1" color={fade(GREY, a)}>{'потрачено '}</Text>,
           <Text key="2" bold color={fade(c, a)}>{`${used}%`}</Text>,
           <Text key="3" color={fade(GREY, a)}>{'   осталось '}</Text>,
-          <Text key="4" bold color={fade('#e5e5e5', a)}>{`${100 - used}%`}</Text>,
+          <Text key="4" bold color={fade(COLOUR.text, a)}>{`${100 - used}%`}</Text>,
         ])}
         {until
           ? row(2, 'r', (a: number) => [
               <Text key="1" color={fade(GREY, a)}>{'сбросится через '}</Text>,
-              <Text key="2" bold color={fade('#22e5f0', a)}>{until}</Text>,
+              <Text key="2" bold color={fade(COLOUR.reset, a)}>{until}</Text>,
               when ? <Text key="3" color={fade(GREY, a)}>{weekly ? `   ${when}` : `   в ${when}`}</Text> : null,
             ])
           : null}
@@ -293,17 +324,19 @@ async function drawCard($: any, e: any) {
     )
   }
 
+  // three columns need about 100 columns; in a narrower window they stack instead of wrapping mid-line
+  const narrow = (e.props?.bodyColumns ?? 100) < 100
   return (
     <Box key="footer-ag-card" flexDirection="column" gap={1} paddingX={1}>
-      <Box flexDirection="row" gap={6}>
+      <Box flexDirection={narrow ? 'column' : 'row'} gap={narrow ? 1 : 6}>
         {limit('five', '5-часовой лимит', s.five, false)}
         {limit('week', 'Недельный лимит', s.week, true)}
         {s.window > 0 ? (
           <Box key="ctx" flexDirection="column">
-            {row(0, 'h', (a: number) => <Text bold color={fade('#c4b5fd', a)}>Этот чат</Text>)}
+            {row(0, 'h', (a: number) => <Text bold color={fade(COLOUR.context, a)}>Этот чат</Text>)}
             {row(1, 'u', (a: number) => [
               <Text key="1" color={fade(GREY, a)}>{'занято '}</Text>,
-              <Text key="2" bold color={fade('#c4b5fd', a)}>{`${Math.round(s.percent)}%`}</Text>,
+              <Text key="2" bold color={fade(COLOUR.context, a)}>{`${Math.round(s.percent)}%`}</Text>,
               <Text key="3" color={fade(GREY, a)}>{' памяти'}</Text>,
             ])}
             {row(2, 't', (a: number) => <Text color={fade(GREY, a)}>{`${ruNum(s.tokens)} из ${ruNum(s.window)} токенов`}</Text>)}
@@ -329,6 +362,35 @@ function pick(c: { tokens?: number; window: number; percent?: number }, limits: 
     return l ? { used: l.percentUsed, resetsAt: l.resetsAt ?? null } : null
   }
   return { tokens: c.tokens ?? 0, window: c.window, percent: c.percent ?? 0, five: get('five_hour'), week: get('seven_day') }
+}
+
+// Toasts when a limit passes 50%, 80% and 95% used: once per level and window, remembered across chats in
+// $.store so every open chat does not repeat it. A window is the same while its reset time stays within half
+// an hour of the one remembered (the reported time can drift a little between replies).
+export const LEVELS = [50, 80, 95]
+type Warned = { resetsAt: string | null; level: number }
+export function sameWindow(a: string | null, b: string | null): boolean {
+  if (!a || !b) return a === b
+  return Math.abs(Date.parse(a) - Date.parse(b)) < 30 * 60_000
+}
+// the highest level `used` has reached above the one already warned about, or 0
+export function crossed(warnedLevel: number, used: number): number {
+  let hit = 0
+  for (const lv of LEVELS) if (used >= lv && lv > warnedLevel) hit = lv
+  return hit
+}
+async function warn($: any, kind: View, lim: Limit | null) {
+  if (!lim) return
+  const key = kind === 'five' ? 'warned-five' : 'warned-week'
+  const saved = (await $.store.get(key)) as Warned | undefined
+  const prev = saved && sameWindow(saved.resetsAt, lim.resetsAt) ? saved.level : 0
+  const hit = crossed(prev, lim.used)
+  if (!hit) return
+  await $.store.set(key, { resetsAt: lim.resetsAt, level: hit } satisfies Warned)
+  const until = longLeft(lim.resetsAt, await $.clock.now())
+  const name = kind === 'five' ? 'Лимит на 5 часов' : 'Недельный лимит'
+  const text = `${name}: потрачено ${Math.round(lim.used)}%, осталось ${100 - Math.round(lim.used)}%${until ? ` · сброс через ${until}` : ''}`
+  $.ui.toast(text, { timeoutMs: hit >= 95 ? 10_000 : 6_000 })
 }
 
 // A saved reading whose window already reset means the limit is back to zero.
