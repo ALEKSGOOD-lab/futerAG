@@ -241,11 +241,9 @@ export const register: Register = on => {
     const pct = known ? `${Math.round(r * 100)}%` : '—'
     return (
       <Box flexDirection="row" flexGrow={1} justifyContent="space-between" gap={2}>
-        <Box flexDirection="row" gap={1}>
+        <Box flexDirection="row" gap={1} flexShrink={0}>
           {/* only the live values: nothing more fits, and the details live in the card above the prompt */}
           <Box key="footer-ag-values" flexDirection="row" gap={1}>
-            {/* which limit the bar is showing: /limit switches it */}
-            <Text key="footer-ag-mode" dimColor>{v === 'week' ? 'нед' : '5ч'}</Text>
             {item(Box, Text, t, v, r, pct, '', 5, 4, known)}
             {face ? <Text bold color={r < URGENT ? hex(baseColor(r)) : COLOUR.face}>{face}</Text> : null}
           </Box>

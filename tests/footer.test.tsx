@@ -40,7 +40,8 @@ for (const surface of ['desktop', 'terminal'] as const) {
     const ui = await $.ui.mount({ ...FOOTER, surface })
     // 14% used: the bar and the number both show what is left
     expect(await ui.find({ type: 'Text', text: /86%/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: '5ч' })).toBeDefined()
+    // no extra label: the slot is narrow and the reset time must fit whole
+    expect(await ui.find({ type: 'Text', text: '5ч' })).toBeUndefined()
     expect(String((await ui.find({ key: 'footer-ag-info' }))?.props.label)).toContain('ⓘ')
     expect(await ui.find({ type: 'Text', text: /лимит|потрачено|токен|сброс/i })).toBeUndefined()
     await ui.unmount()
